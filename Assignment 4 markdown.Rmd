@@ -1,0 +1,142 @@
+---
+title: "Assignment 4 - Mixed Models - BeetleBody dataset"
+author: "Molly Richard"
+date: "24 September 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#clear R's brain; command to remove all objects in memory
+rm(list=ls())
+
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE
+	
+)
+packages_needed <- c("ggplot2", # graphics
+                     "dplyr",
+                     "arm", # display() etc.
+                     "MASS",
+                     "ggfortify",
+                     "nlme",
+                     "lme4", 
+                     "rptr", 
+                     "knitr"
+                     )
+pk_to_install <- packages_needed [!( packages_needed %in% rownames(installed.packages())  )]
+if(length(pk_to_install)>0 ){
+  install.packages(pk_to_install,repos="http://cran.r-project.org")
+}
+#lapply(packages_needed, require, character.only = TRUE)
+library(ggplot2)
+library(dplyr)
+library(arm)
+library(MASS)
+library(ggfortify)
+library(nlme)
+library(lme4)
+library(readr)
+library(rptR)
+library(knitr)
+
+data("BeetlesBody")
+```
+### Dataset
+
+Beetle body dataset is comprised of data collected on 12 different populations of beetle larvae collected from 2 different habitats. The larvae were divided into 2 feeding treatments, sexed when they became pupals then further divided into containers by sex.  Individual's body lengths were recorded.
+
+What are the contributing factors to beetle body length?
+
+### 1. Fixed and Random Variables
+
+```{r}
+beetles <- data.frame(BeetlesBody)
+kable(beetles[1:10, ], format = "pandoc", caption = '<strong>Table 1.</strong> Beetle Body Dataset')
+```
+
+The fixed variables for this data set are Sex, Treatment, and Habitat. 
+The random variables are Population and Container; these variables are also nested. 
+This leaves BodyL (body length) as the response variable. 
+
+
+```{r echo=FALSE}
+qplot(Treatment,BodyL, colour = Sex, data= beetles, geom= c("point"),
+                 xlab= "Treatment", ylab= "Body Length", main = "Measured body lengths in response to treatments in the 12 populations", 
+                 facets=.~Population)+
+                 theme_bw()
+```
+
+
+ 
+
+### 2. Global Model
+```{r message=FALSE, warning=FALSE}
+lmebeetle <- lmer(BodyL ~ Treatment*Sex*Habitat+ (1|Population) + (1|Container) + (1|Population:Container), data=beetles)
+summary(lmebeetle)
+anova(lmebeetle)
+
+## Long-hand syntax
+##   lmebeetle0 <- lmer(BodyL ~ Treatment + Sex + Habitat +Treatment:Sex +Treatment:Habitat + Sex:Habitat+ Treatment:Sex:Habitat + (1|Population) + (1|Container) + (1|Population:Container), data=beetles)
+##  summary(lmebeetle0)
+```
+
+Population seems to be an important factor because it has a higher amount of variance , 1.37 which accounts for 48.9% of the total variance. The nesting of container within population does not appear to contribute variation in body size (0.05). The ANOVA table shows Sex is an important factor with a high sum of sqaures value followed by Treatment. 
+
+
+### 3. Reduced Models 
+```{r message=FALSE, warning=FALSE}
+#Remove Population:Container interaction
+lmebeetle1 <- lmer(BodyL ~ Treatment*Sex*Habitat+ (1|Population) + (1|Container), data=beetles)
+anova(lmebeetle, lmebeetle1)
+```
+After removing the nesting interaction between population and Container, there was no significant difference between this model and the global model (p = 1) however, the global model maintained a higher AIC score (3072.0) compared to the first reduced model(3070.0). 
+
+Next, I looked at how removing the different layers would affect the model. 
+```{r  message=FALSE, warning=FALSE}
+# Remove Population and Container
+lmebeetle2 <- lmer(BodyL ~ Treatment * Sex * Habitat + (1|Population) , data=beetles)
+anova(lmebeetle, lmebeetle2)
+
+lmebeetle3 <- lmer(BodyL ~ Treatment * Sex * Habitat + (1|Container), data=beetles)
+anova(lmebeetle, lmebeetle3)
+```
+
+Both models removing Population and Container, were shown to be significantly different (p = 2.772e-12, p < 2.2e-16) from the global so both parameters should remain included. 
+
+Next, I began looking at the roles the fixed variables. I began by removing Habitat and its interactions. 
+
+```{r message=FALSE, warning=FALSE}
+# Remove Habitat and interactions
+lmebeetle4 <- lmer(BodyL ~ Treatment * Sex + (1|Population) + (1|Container) , data=beetles)
+anova(lmebeetle, lmebeetle4)
+```
+I removed each habitat interaction individually and for all the Chi square value remained 1 until I removed the Treatment:Sex:Habitat interaction which gave a p-value of 0.785, and a lower AIC value.  This is still not significatly different so I continued to remove variables to test again the global model.  Next I removed the interaction between Sex and Treatment.
+
+```{r message=FALSE, warning=FALSE}
+#Remove Sex:Treatment interaction
+lmebeetle5 <- lmer(BodyL ~ Sex + Treatment + (1|Population) + (1|Container) , data=beetles)
+anova(lmebeetle, lmebeetle5) 
+```
+Removing the interaction between Sex and Treatment did not show any significant results when compared to the gloval model (p = 0.83), and it also maintained a lower AIC value compared to the global model. 
+
+```{r message=FALSE, warning=FALSE}
+#Remove Sex and Treatment
+lmebeetle6 <- lmer(BodyL ~ Sex + (1|Population) + (1|Container) , data=beetles)
+anova(lmebeetle, lmebeetle6)
+
+lmebeetle7 <- lmer(BodyL ~ Treatment + (1|Population) + (1|Container) , data=beetles)
+anova(lmebeetle, lmebeetle7)
+```
+
+When either Sex or Treatment was remove the model became significantly different from the global model (p = 0.002251, p < 2.2e-16). 
+
+For all the non-significant reduced models, the global model maintained the higher AIC value allowing for some reductions to be made to reduce the number of variables and still maintain the integrity of the model.  I deteremined the most informative model with non-significant reductions was (BodyL ~ Sex + Treatment + (1|Population) + (1|Container). 
+
+
+
+
+
+
+
+
